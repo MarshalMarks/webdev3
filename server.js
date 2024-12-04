@@ -3,32 +3,41 @@ const app = express();
 const PORT = 3000;
 app.use(express.json());
 
+// Cors is used to make sure that the frontend is allowed to talk to the API
 const cors = require('cors');
 app.use(cors());
 
-let tasks = [
-    { id: 1, name: "Clean dishes" },
-    { id: 2, name: "Do laundry" },
-    { id: 3, name: "Finish homework" },
-];
+// Using an in-memory sql database
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database(':memory:');
+
+// Initialize database (serialize to ensure this runs first)
+db.serialize(() => {
+    db.run("CREATE TABLE tasks (id INTEGER PRIMARY KEY, name TEXT)");
+});
 
 app.get("/test", (req, res) => {
     res.status(200).json({ success: true });
 });
 
 app.get("/tasks", (req, res) => {
-    res.json(tasks);
+    db.all("SELECT * FROM tasks", (err, rows) => {
+        res.json(rows);
+    });
 });
 
 app.post("/tasks", (req, res) => {
-    const task = { id: tasks[tasks.length-1].id + 1, nam: req.body.name };
-    tasks.push(task);
-    res.status(201).json(task);
+    const statement = db.prepare("INSERT INTO tasks (name) VALUES (?)");
+    statement.run(req.body.name, function() {
+        res.status(201).json({ id: this.lastID, name:req.body.name });
+    });
+    statement.finalize();
 });
 
 app.delete("/tasks/:id", (req, res) => {
-    tasks = tasks.filter(task => task.id !== parseInt(req.params.id));
-    res.status(204).send();
+    db.run("DELETE FROM tasks WHERE id = ?", req.params.id, function() {
+        res.status(204).send();
+    });
 });
 
 app.listen(PORT, () => console.log("Server is running on port " + PORT));
